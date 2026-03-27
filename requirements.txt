@@ -1,0 +1,13 @@
+flask
+flask-cors
+groq
+python-dotenv
+pypdf
+pikepdf
+langchain
+langchain-core
+langchain-community
+langchain-huggingface
+langchain-text-splitters
+faiss-cpu
+sentence-transformers

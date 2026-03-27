@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpsRAG — Upstream Intelligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Design tokens ──────────────────────────────────────────────── */
+    :root {
+      --bg:          #0a0c0f;
+      --surface:     #111418;
+      --surface-2:   #181c22;
+      --border:      #232830;
+      --border-hot:  #f97316;
+      --accent:      #f97316;      /* oil-flame orange */
+      --accent-dim:  #7c3a12;
+      --text:        #e2e8f0;
+      --text-muted:  #64748b;
+      --text-dim:    #334155;
+      --engineering: #38bdf8;
+      --regulatory:  #a78bfa;
+      --safety:      #4ade80;
+      --mixed:       #f97316;
+      --mono:        'Share Tech Mono', monospace;
+      --body:        'Barlow', sans-serif;
+      --display:     'Barlow Condensed', sans-serif;
+      --radius:      4px;
+    }
+
+    /* ── Reset ──────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--body);
+      font-weight: 400;
+      line-height: 1.6;
+      min-height: 100vh;
+      /* subtle grid texture */
+      background-image:
+        linear-gradient(rgba(249,115,22,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(249,115,22,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* ── Layout ─────────────────────────────────────────────────────── */
+    .shell {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 260px 1fr;
+      grid-template-areas:
+        "header header"
+        "sidebar main"
+        "footer footer";
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────── */
+    header {
+      grid-area: header;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 56px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+
+    .logo-mark {
+      width: 28px; height: 28px;
+      background: var(--accent);
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+      animation: pulse-logo 3s ease-in-out infinite;
+    }
+
+    @keyframes pulse-logo {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .6; }
+    }
+
+    .logo-text {
+      font-family: var(--display);
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      color: var(--text);
+    }
+
+    .logo-text span { color: var(--accent); }
+
+    .header-meta {
+      font-family: var(--mono);
+      font-size: .7rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #4ade80;
+      margin-right: .4rem;
+      animation: blink 2s step-end infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0; }
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────── */
+    aside {
+      grid-area: sidebar;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .sidebar-section-title {
+      font-family: var(--mono);
+      font-size: .65rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      padding-bottom: .5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Folder filter */
+    .folder-btn {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      width: 100%;
+      padding: .55rem .75rem;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-family: var(--body);
+      font-size: .85rem;
+      cursor: pointer;
+      text-align: left;
+      transition: all .15s;
+    }
+
+    .folder-btn:hover { background: var(--surface-2); color: var(--text); }
+
+    .folder-btn.active {
+      background: var(--surface-2);
+      border-color: var(--border-hot);
+      color: var(--text);
+    }
+
+    .folder-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot-all         { background: var(--accent); }
+    .dot-engineering { background: var(--engineering); }
+    .dot-regulatory  { background: var(--regulatory); }
+    .dot-safety      { background: var(--safety); }
+
+    /* Suggested queries */
+    .suggestion {
+      padding: .45rem .6rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--accent-dim);
+      border-radius: var(--radius);
+      font-size: .78rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all .15s;
+      line-height: 1.4;
+    }
+
+    .suggestion:hover {
+      border-left-color: var(--accent);
+      color: var(--text);
+      background: var(--surface);
+    }
+
+    .suggestions-list { display: flex; flex-direction: column; gap: .5rem; }
+
+    /* ── Main panel ──────────────────────────────────────────────────── */
+    main {
+      grid-area: main;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Results feed */
+    #feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      scroll-behavior: smooth;
+    }
+
+    #feed::-webkit-scrollbar { width: 4px; }
+    #feed::-webkit-scrollbar-track { background: transparent; }
+    #feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* Empty state */
+    .empty-state {
+      margin: auto;
+      text-align: center;
+      padding: 3rem;
+      opacity: .4;
+    }
+
+    .empty-state-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .empty-state h2 {
+      font-family: var(--display);
+      font-size: 1.3rem;
+      font-weight: 600;
+      letter-spacing: .06em;
+      margin-bottom: .4rem;
+    }
+
+    .empty-state p { font-size: .85rem; color: var(--text-muted); }
+
+    /* Result card */
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      animation: slide-up .25s ease both;
+    }
+
+    @keyframes slide-up {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .75rem 1rem;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      gap: 1rem;
+    }
+
+    .card-question {
+      font-size: .9rem;
+      font-weight: 500;
+      color: var(--text);
+      flex: 1;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      flex-shrink: 0;
+    }
+
+    .domain-badge {
+      font-family: var(--mono);
+      font-size: .65rem;
+      padding: .2rem .5rem;
+      border-radius: 2px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .badge-Engineering { background: rgba(56,189,248,.12); color: var(--engineering); border: 1px solid rgba(56,189,248,.25); }
+    .badge-Regulatory  { background: rgba(167,139,250,.12); color: var(--regulatory); border: 1px solid rgba(167,139,250,.25); }
+    .badge-Safety      { background: rgba(74,222,128,.12);  color: var(--safety);     border: 1px solid rgba(74,222,128,.25); }
+    .badge-Mixed       { background: rgba(249,115,22,.12);  color: var(--accent);     border: 1px solid rgba(249,115,22,.25); }
+
+    .latency {
+      font-family: var(--mono);
+      font-size: .65rem;
+      color: var(--text-dim);
+    }
+
+    .card-body { padding: 1rem 1.25rem; }
+
+    .answer-text {
+      font-size: .9rem;
+      line-height: 1.75;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+
+    /* Reasoning toggle */
+    .reasoning-toggle {
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      margin-top: 1rem;
+      padding: .4rem 0;
+      background: none;
+      border: none;
+      border-top: 1px solid var(--border);
+      width: 100%;
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: .7rem;
+      letter-spacing: .06em;
+      cursor: pointer;
+      text-align: left;
+      transition: color .15s;
+    }
+
+    .reasoning-toggle:hover { color: var(--accent); }
+
+    .toggle-arrow {
+      transition: transform .2s;
+      display: inline-block;
+    }
+
+    .reasoning-toggle.open .toggle-arrow { transform: rotate(90deg); }
+
+    .reasoning-block {
+      display: none;
+      margin-top: .75rem;
+      padding: .75rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--accent-dim);
+      border-radius: var(--radius);
+      font-family: var(--mono);
+      font-size: .75rem;
+      line-height: 1.7;
+      color: var(--text-muted);
+      white-space: pre-wrap;
+    }
+
+    .reasoning-block.visible { display: block; animation: slide-up .2s ease; }
+
+    /* Sources */
+    .sources-section {
+      padding: .75rem 1.25rem;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+    }
+
+    .sources-label {
+      font-family: var(--mono);
+      font-size: .65rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-dim);
+      margin-bottom: .5rem;
+    }
+
+    .sources-list { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+    .source-tag {
+      font-family: var(--mono);
+      font-size: .68rem;
+      padding: .2rem .5rem;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      color: var(--text-muted);
+    }
+
+    /* Loading card */
+    .loading-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .loader-bars {
+      display: flex;
+      gap: 3px;
+      align-items: flex-end;
+      height: 20px;
+    }
+
+    .loader-bars span {
+      display: block;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: bar-bounce .8s ease-in-out infinite;
+    }
+
+    .loader-bars span:nth-child(2) { animation-delay: .1s; }
+    .loader-bars span:nth-child(3) { animation-delay: .2s; }
+    .loader-bars span:nth-child(4) { animation-delay: .3s; }
+
+    @keyframes bar-bounce {
+      0%, 100% { height: 4px;  opacity: .4; }
+      50%       { height: 20px; opacity: 1; }
+    }
+
+    .loading-text {
+      font-family: var(--mono);
+      font-size: .78rem;
+      color: var(--text-muted);
+    }
+
+    .loading-text strong {
+      display: block;
+      color: var(--text);
+      margin-bottom: .15rem;
+    }
+
+    /* Error card */
+    .error-card {
+      background: rgba(239,68,68,.07);
+      border: 1px solid rgba(239,68,68,.25);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      font-size: .85rem;
+      color: #f87171;
+      font-family: var(--mono);
+    }
+
+    /* ── Input bar ───────────────────────────────────────────────────── */
+    .input-bar {
+      padding: 1rem 2rem;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+    }
+
+    .input-row {
+      display: flex;
+      gap: .75rem;
+      align-items: flex-end;
+      max-width: 900px;
+    }
+
+    #question-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--body);
+      font-size: .9rem;
+      padding: .7rem 1rem;
+      resize: none;
+      min-height: 44px;
+      max-height: 140px;
+      line-height: 1.5;
+      transition: border-color .15s;
+      overflow-y: auto;
+    }
+
+    #question-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    #question-input::placeholder { color: var(--text-dim); }
+
+    #submit-btn {
+      height: 44px;
+      padding: 0 1.25rem;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      font-family: var(--display);
+      font-size: .95rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      cursor: pointer;
+      transition: background .15s, transform .1s;
+      white-space: nowrap;
+    }
+
+    #submit-btn:hover    { background: #ea6c0a; }
+    #submit-btn:active   { transform: scale(.97); }
+    #submit-btn:disabled { background: var(--accent-dim); cursor: not-allowed; }
+
+    .input-hint {
+      margin-top: .4rem;
+      font-family: var(--mono);
+      font-size: .65rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────── */
+    footer {
+      grid-area: footer;
+      padding: .5rem 2rem;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    footer span {
+      font-family: var(--mono);
+      font-size: .65rem;
+      color: var(--text-dim);
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .shell {
+        grid-template-columns: 1fr;
+        grid-template-areas: "header" "main" "footer";
+      }
+      aside { display: none; }
+      #feed { padding: 1rem; }
+      .input-bar { padding: .75rem 1rem; }
+    }
+  </style>
+</head>
+
+<body>
+<div class="shell">
+
+  <!-- ── Header ────────────────────────────────────────────────────── -->
+  <header>
+    <div class="logo">
+      <div class="logo-mark"></div>
+      <span class="logo-text">Ops<span>RAG</span></span>
+    </div>
+    <div class="header-meta">
+      <span><span class="status-dot"></span>SYSTEM ONLINE</span>
+      <span id="query-count">0 QUERIES</span>
+    </div>
+  </header>
+
+  <!-- ── Sidebar ───────────────────────────────────────────────────── -->
+  <aside>
+    <div>
+      <div class="sidebar-section-title">Document Scope</div>
+      <div style="display:flex;flex-direction:column;gap:.3rem;margin-top:.75rem;" id="folder-buttons">
+        <button class="folder-btn active" data-folder="all">
+          <span class="folder-dot dot-all"></span>All Documents
+        </button>
+        <button class="folder-btn" data-folder="engineering">
+          <span class="folder-dot dot-engineering"></span>Engineering
+        </button>
+        <button class="folder-btn" data-folder="regulatory">
+          <span class="folder-dot dot-regulatory"></span>Regulatory
+        </button>
+        <button class="folder-btn" data-folder="safety">
+          <span class="folder-dot dot-safety"></span>Safety
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <div class="sidebar-section-title">Suggested Queries</div>
+      <div class="suggestions-list" id="suggestions">
+        <div class="suggestion" data-folder="engineering">What are inspection intervals for Class 1 piping systems?</div>
+        <div class="suggestion" data-folder="regulatory">What are the licensing requirements for upstream operations in Nigeria?</div>
+        <div class="suggestion" data-folder="safety">What was the LTIF trend in the 2024 IOGP safety report?</div>
+        <div class="suggestion" data-folder="engineering">When should risk-based inspection be applied to piping circuits?</div>
+        <div class="suggestion" data-folder="regulatory">What penalties apply for non-compliance with Nigerian petroleum regulations?</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ──────────────────────────────────────────────────────── -->
+  <main>
+    <div id="feed">
+      <div class="empty-state" id="empty-state">
+        <span class="empty-state-icon">⬡</span>
+        <h2>OPSRAG UPSTREAM INTELLIGENCE</h2>
+        <p>Query across API 570, Nigerian upstream regulations,<br>and IOGP 2024 safety performance data.</p>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <div class="input-row">
+        <textarea
+          id="question-input"
+          placeholder="Ask a technical question across your documents..."
+          rows="1"
+        ></textarea>
+        <button id="submit-btn">ASK</button>
+      </div>
+      <div class="input-hint">ENTER to submit &nbsp;·&nbsp; SHIFT+ENTER for new line &nbsp;·&nbsp; Scope narrows results to one folder</div>
+    </div>
+  </main>
+
+  <!-- ── Footer ────────────────────────────────────────────────────── -->
+  <footer>
+    <span>OPSRAG v1.0 &nbsp;·&nbsp; LLaMA 3.3 70B via Groq &nbsp;·&nbsp; BGE Semantic Retrieval</span>
+    <span id="last-latency"></span>
+  </footer>
+
+</div>
+
+<script>
+  /* ── State ────────────────────────────────────────────────────────── */
+  let activeFolder = 'all';
+  let queryCount   = 0;
+  let isLoading    = false;
+
+  /* ── Elements ─────────────────────────────────────────────────────── */
+  const feed      = document.getElementById('feed');
+  const input     = document.getElementById('question-input');
+  const submitBtn = document.getElementById('submit-btn');
+  const emptyState = document.getElementById('empty-state');
+  const queryCountEl = document.getElementById('query-count');
+  const lastLatencyEl = document.getElementById('last-latency');
+
+  /* ── Folder filter ────────────────────────────────────────────────── */
+  document.getElementById('folder-buttons').addEventListener('click', e => {
+    const btn = e.target.closest('.folder-btn');
+    if (!btn) return;
+    document.querySelectorAll('.folder-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFolder = btn.dataset.folder;
+  });
+
+  /* ── Suggestions ──────────────────────────────────────────────────── */
+  document.getElementById('suggestions').addEventListener('click', e => {
+    const s = e.target.closest('.suggestion');
+    if (!s) return;
+    input.value = s.textContent.trim();
+
+    // Also switch folder to match the suggestion
+    const sugFolder = s.dataset.folder;
+    if (sugFolder) {
+      document.querySelectorAll('.folder-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.folder === sugFolder);
+      });
+      activeFolder = sugFolder;
+    }
+
+    input.focus();
+    autoResize();
+  });
+
+  /* ── Auto-resize textarea ─────────────────────────────────────────── */
+  function autoResize() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+  }
+  input.addEventListener('input', autoResize);
+
+  /* ── Enter to submit ──────────────────────────────────────────────── */
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  });
+
+  submitBtn.addEventListener('click', handleSubmit);
+
+  /* ── Submit ───────────────────────────────────────────────────────── */
+  async function handleSubmit() {
+    const question = input.value.trim();
+    if (!question || isLoading) return;
+
+    isLoading = true;
+    submitBtn.disabled = true;
+    input.value = '';
+    autoResize();
+
+    // Hide empty state
+    if (emptyState) emptyState.remove();
+
+    // Show loading card
+    const loadingCard = createLoadingCard(question);
+    feed.appendChild(loadingCard);
+    feed.scrollTop = feed.scrollHeight;
+
+    try {
+      const res = await fetch('/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, folder: activeFolder }),
+      });
+
+      const data = await res.json();
+      loadingCard.remove();
+
+      if (!res.ok) {
+        feed.appendChild(createErrorCard(data.error || 'Unknown error'));
+      } else {
+        feed.appendChild(createResultCard(data));
+        queryCount++;
+        queryCountEl.textContent = `${queryCount} ${queryCount === 1 ? 'QUERY' : 'QUERIES'}`;
+        lastLatencyEl.textContent = `LAST RESPONSE ${data.latency_ms}ms`;
+      }
+
+    } catch (err) {
+      loadingCard.remove();
+      feed.appendChild(createErrorCard('Network error — is the server running?'));
+    }
+
+    feed.scrollTop = feed.scrollHeight;
+    isLoading = false;
+    submitBtn.disabled = false;
+    input.focus();
+  }
+
+  /* ── Card builders ────────────────────────────────────────────────── */
+  function createLoadingCard(question) {
+    const card = document.createElement('div');
+    card.className = 'loading-card';
+    card.innerHTML = `
+      <div class="loader-bars">
+        <span></span><span></span><span></span><span></span>
+      </div>
+      <div class="loading-text">
+        <strong>${escHtml(question.slice(0, 80))}${question.length > 80 ? '…' : ''}</strong>
+        Retrieving relevant excerpts and reasoning…
+      </div>`;
+    return card;
+  }
+
+  function createErrorCard(msg) {
+    const card = document.createElement('div');
+    card.className = 'error-card';
+    card.textContent = `✗ ${msg}`;
+    return card;
+  }
+
+  function createResultCard(data) {
+    const card = document.createElement('div');
+    card.className = 'result-card';
+
+    const domainClass = `badge-${data.domain || 'Mixed'}`;
+    const hasReasoning = data.reasoning && data.reasoning.trim().length > 0;
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-question">${escHtml(data.question)}</div>
+        <div class="card-meta">
+          <span class="domain-badge ${domainClass}">${escHtml(data.domain || 'Mixed')}</span>
+          <span class="latency">${data.latency_ms}ms</span>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="answer-text">${escHtml(data.answer)}</div>
+
+        ${hasReasoning ? `
+        <button class="reasoning-toggle" onclick="toggleReasoning(this)">
+          <span class="toggle-arrow">▶</span>
+          &nbsp;VIEW CHAIN-OF-THOUGHT REASONING
+        </button>
+        <div class="reasoning-block">${escHtml(data.reasoning)}</div>
+        ` : ''}
+      </div>
+
+      ${data.sources && data.sources.length ? `
+      <div class="sources-section">
+        <div class="sources-label">Sources Retrieved</div>
+        <div class="sources-list">
+          ${data.sources.map(s => `<span class="source-tag">${escHtml(s)}</span>`).join('')}
+        </div>
+      </div>` : ''}
+    `;
+
+    return card;
+  }
+
+  /* ── Reasoning toggle ─────────────────────────────────────────────── */
+  function toggleReasoning(btn) {
+    const block = btn.nextElementSibling;
+    const isOpen = block.classList.toggle('visible');
+    btn.classList.toggle('open', isOpen);
+  }
+
+  /* ── Util ─────────────────────────────────────────────────────────── */
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+</body>
+</html>
