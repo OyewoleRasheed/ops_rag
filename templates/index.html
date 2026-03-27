@@ -584,11 +584,11 @@
     <div>
       <div class="sidebar-section-title">Suggested Queries</div>
       <div class="suggestions-list" id="suggestions">
-        <div class="suggestion" data-folder="engineering">What are inspection intervals for Class 1 piping systems?</div>
-        <div class="suggestion" data-folder="regulatory">What are the licensing requirements for upstream operations in Nigeria?</div>
-        <div class="suggestion" data-folder="safety">What was the LTIF trend in the 2024 IOGP safety report?</div>
-        <div class="suggestion" data-folder="engineering">When should risk-based inspection be applied to piping circuits?</div>
-        <div class="suggestion" data-folder="regulatory">What penalties apply for non-compliance with Nigerian petroleum regulations?</div>
+        <div class="suggestion">What are inspection intervals for Class 1 piping systems?</div>
+        <div class="suggestion">What are the licensing requirements for upstream operations in Nigeria?</div>
+        <div class="suggestion">What was the LTIF trend in the 2024 IOGP safety report?</div>
+        <div class="suggestion">When should risk-based inspection be applied to piping circuits?</div>
+        <div class="suggestion">What penalties apply for non-compliance with Nigerian petroleum regulations?</div>
       </div>
     </div>
   </aside>
@@ -612,7 +612,7 @@
         ></textarea>
         <button id="submit-btn">ASK</button>
       </div>
-      <div class="input-hint">ENTER to submit &nbsp;·&nbsp; SHIFT+ENTER for new line &nbsp;·&nbsp; Scope narrows results to one folder</div>
+      <div class="input-hint">ENTER to submit &nbsp;·&nbsp; SHIFT+ENTER for new line &nbsp;·&nbsp; Use sidebar to filter by document type</div>
     </div>
   </main>
 
@@ -648,20 +648,12 @@
   });
 
   /* ── Suggestions ──────────────────────────────────────────────────── */
+  // Suggestions always search ALL documents — no folder switching.
+  // The user can manually set a folder filter if they want to narrow results.
   document.getElementById('suggestions').addEventListener('click', e => {
     const s = e.target.closest('.suggestion');
     if (!s) return;
     input.value = s.textContent.trim();
-
-    // Also switch folder to match the suggestion
-    const sugFolder = s.dataset.folder;
-    if (sugFolder) {
-      document.querySelectorAll('.folder-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.folder === sugFolder);
-      });
-      activeFolder = sugFolder;
-    }
-
     input.focus();
     autoResize();
   });

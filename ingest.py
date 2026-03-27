@@ -10,7 +10,11 @@ DOCUMENTS_DIR = os.path.join(os.path.dirname(__file__), "documents")
 def load_pdfs(directory: str = DOCUMENTS_DIR) -> list[Document]:
     """Load all PDFs from the documents directory."""
     documents = []
-    pdf_files = [f for f in os.listdir(directory) if f.endswith(".pdf")]
+    pdf_files = []
+    for root, _, files in os.walk(directory):
+        for file in files:
+            if file.lower().endswith(".pdf"):
+                pdf_files.append(os.path.join(root, file))
 
     if not pdf_files:
         raise FileNotFoundError(f"No PDF files found in {directory}")
