@@ -24,7 +24,7 @@ FAISS_INDEX_PATH = os.path.join(BASE_DIR, "faiss_index")
 #   - It's built for asymmetric retrieval: short query vs long document chunk
 #   - It understands that "inspection frequency" ≈ "examination intervals"
 #     which is exactly the kind of paraphrasing in technical O&G documents
-EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
 def get_embeddings() -> HuggingFaceEmbeddings:

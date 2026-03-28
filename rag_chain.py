@@ -11,7 +11,7 @@ load_dotenv()
 # all-MiniLM-L6-v2 is fast and free — but for technical O&G text,
 # BAAI/bge-base-en-v1.5 gives noticeably better semantic matching on
 # clause-level retrieval (API 570 numbered sections, regulatory definitions).
-EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"
+EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 FAISS_INDEX_PATH = os.path.join(os.path.dirname(__file__), "faiss_index")
 
 # ── Domain system prompts ─────────────────────────────────────────────────────
