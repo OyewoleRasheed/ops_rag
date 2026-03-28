@@ -4,18 +4,18 @@ app.py
 Flask backend for OpsRAG.
 
 Production-readiness features:
-  - Structured JSON API (not just a chatbot page)
-  - Request validation with error codes
-  - Startup health check endpoint
+  - Port binds immediately — vectorstore loads in background thread
+  - Structured JSON API with proper HTTP status codes
+  - /health endpoint for Render's port scanner
+  - Request validation with clear error messages
+  - Graceful 503 while app is warming up
   - Request logging with timing
-  - Graceful error handling — app never crashes on bad input
-  - Environment-based config (dev vs prod)
-  - CORS headers for future API consumers
 """
 
 import os
 import time
 import logging
+import threading
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from groq import Groq
@@ -26,8 +26,6 @@ from rag_chain import answer_question
 load_dotenv()
 
 # ── Logging ───────────────────────────────────────────────────────────────────
-# In production you'd ship these logs to something like Datadog or CloudWatch.
-# For now they go to stdout so Render can capture them.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -37,18 +35,39 @@ logger = logging.getLogger(__name__)
 
 # ── App factory ───────────────────────────────────────────────────────────────
 app = Flask(__name__)
-CORS(app)  # Allow cross-origin requests — needed if you later build a separate frontend
+CORS(app)
 
-# ── Startup — load heavy resources once ───────────────────────────────────────
-# These are loaded at startup, not per-request.
-# Loading per-request would mean ~2 min wait on every question — never do that.
-logger.info("Loading vectorstore...")
-VECTORSTORE = get_vectorstore()
+# ── Lazy startup ──────────────────────────────────────────────────────────────
+# WHY: Render scans for an open port immediately after starting gunicorn.
+# If we load the vectorstore synchronously before binding, Render times out
+# and kills the deploy — even though the app would eventually be ready.
+#
+# Fix: bind the port first (Flask does this instantly), then load resources
+# in a background thread. Requests that arrive during loading get a 503
+# with a "warming up" message instead of crashing.
 
-logger.info("Initialising Groq client...")
-GROQ_CLIENT = Groq(api_key=os.getenv("GROQ_API_KEY"))
+VECTORSTORE  = None
+GROQ_CLIENT  = None
+_ready       = False   # flips to True once background loading finishes
+_load_error  = None    # stores any startup error message
 
-logger.info("OpsRAG ready.\n")
+
+def _load_resources():
+    global VECTORSTORE, GROQ_CLIENT, _ready, _load_error
+    try:
+        logger.info("Background: loading vectorstore...")
+        VECTORSTORE = get_vectorstore()
+        logger.info("Background: initialising Groq client...")
+        GROQ_CLIENT = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        _ready = True
+        logger.info("OpsRAG ready — all resources loaded.")
+    except Exception as e:
+        _load_error = str(e)
+        logger.error(f"Failed to load resources: {e}", exc_info=True)
+
+
+# Start loading in background — port binds immediately, this runs alongside
+threading.Thread(target=_load_resources, daemon=True).start()
 
 VALID_FOLDERS = {"engineering", "regulatory", "safety", "all"}
 
@@ -64,14 +83,20 @@ def index():
 @app.route("/health")
 def health():
     """
-    Health check endpoint.
-    Render, Railway, and most cloud platforms ping /health to know if the
-    app is alive. Return 200 = healthy, anything else = restart the container.
+    Health check endpoint — Render pings this to confirm the app is alive.
+    Returns 200 immediately even while warming up, so Render does not kill
+    the deploy during the vectorstore load.
     """
+    if _load_error:
+        return jsonify({"status": "error", "detail": _load_error}), 500
+
+    if not _ready:
+        return jsonify({"status": "warming_up", "detail": "Loading vectorstore..."}), 200
+
     return jsonify({
-        "status": "ok",
+        "status":      "ok",
         "vectorstore": "loaded",
-        "groq": "connected",
+        "groq":        "connected",
     }), 200
 
 
@@ -83,19 +108,15 @@ def query():
     Expected JSON body:
       {
         "question": "What are inspection intervals for Class 1 piping?",
-        "folder":   "engineering"   // optional: engineering | regulatory | safety | all
-      }
-
-    Returns:
-      {
-        "question":  "...",
-        "answer":    "...",
-        "reasoning": "...",
-        "sources":   ["..."],
-        "domain":    "Engineering",
-        "latency_ms": 1243
+        "folder":   "all"   // engineering | regulatory | safety | all
       }
     """
+    # Return 503 while resources are still loading
+    if not _ready:
+        return jsonify({
+            "error": "App is warming up — please try again in 30 seconds."
+        }), 503
+
     start_time = time.time()
 
     # ── Validate request ──
@@ -119,7 +140,6 @@ def query():
 
     folder_filter = None if folder == "all" else folder
 
-    # ── Log incoming request ──
     logger.info(f"Query | folder={folder} | question={question[:80]}...")
 
     # ── Run RAG pipeline ──
@@ -134,7 +154,6 @@ def query():
         logger.error(f"RAG pipeline error: {e}", exc_info=True)
         return jsonify({"error": "Internal error processing your question"}), 500
 
-    # ── Build response ──
     latency_ms = int((time.time() - start_time) * 1000)
     logger.info(f"Response | domain={result['domain']} | latency={latency_ms}ms")
 
@@ -150,10 +169,6 @@ def query():
 
 @app.route("/api/folders", methods=["GET"])
 def folders():
-    """
-    Returns available document folders.
-    The frontend calls this on load to populate the filter dropdown dynamically.
-    """
     return jsonify({
         "folders": [
             {"id": "all",         "label": "All Documents"},
@@ -165,8 +180,6 @@ def folders():
 
 
 # ── Error handlers ────────────────────────────────────────────────────────────
-# These catch errors at the Flask level — not just inside route functions.
-# A 404 page that returns HTML when the client expects JSON is a common bug.
 
 @app.errorhandler(404)
 def not_found(e):
